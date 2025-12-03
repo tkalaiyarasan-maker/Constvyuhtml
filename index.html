@@ -1,0 +1,845 @@
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { 
+  Calendar, 
+  Filter, 
+  RefreshCw, 
+  Camera as CameraIcon, 
+  FolderOpen, 
+  Image as ImageIcon,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  X,
+  Clock,
+  MapPin,
+  Download,
+  Share2,
+  Sliders
+} from 'lucide-react';
+
+// --- Types ---
+
+export interface Frame {
+  id: string;
+  date: string;
+  time: string;
+  imageUrl: string;
+  thumbnailUrl: string;
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  location: string;
+  startDate: string;
+  status: 'Active' | 'Completed' | 'On Hold';
+}
+
+export interface Camera {
+  id: string;
+  name: string;
+  status: 'Online' | 'Offline' | 'Maintenance';
+  location: string;
+}
+
+// --- Constants & Mock Data ---
+
+const MOCK_PROJECT: Project = {
+  id: 'PRJ-2024-001',
+  name: 'Skyline Plaza Redevelopment',
+  location: '124 Market St, Downtown',
+  startDate: '2024-01-15',
+  status: 'Active'
+};
+
+const MOCK_CAMERAS: Camera[] = [
+  { id: 'cam-01', name: 'Tower Crane 1', status: 'Online', location: 'North Elevation' },
+  { id: 'cam-02', name: 'Gate Entry', status: 'Online', location: 'Main Entrance' },
+  { id: 'cam-03', name: 'Interior Lobby', status: 'Offline', location: 'Ground Floor' },
+];
+
+// Generate some mock frames for demonstration
+const generateMockFrames = (): Frame[] => {
+  const frames: Frame[] = [];
+  const baseDate = new Date('2024-01-01');
+  
+  // Create 10 frames representing construction progress
+  for (let i = 0; i < 10; i++) {
+    const date = new Date(baseDate);
+    date.setDate(baseDate.getDate() + (i * 7)); // Weekly updates
+    
+    const dateStr = date.toISOString().split('T')[0];
+    // Using placeholders with different text to simulate progress
+    const progress = (i + 1) * 10;
+    const color = i % 2 === 0 ? '2563eb' : '4f46e5'; // Alternating shades of blue
+    
+    frames.push({
+      id: `mock-${i}`,
+      date: dateStr,
+      time: '10:00 AM',
+      imageUrl: `https://placehold.co/1200x800/${color}/FFFFFF/png?text=Construction+Week+${i+1}+(${progress}%)`,
+      thumbnailUrl: `https://placehold.co/300x200/${color}/FFFFFF/png?text=W${i+1}`
+    });
+  }
+  return frames;
+};
+
+const MOCK_FRAMES = generateMockFrames();
+
+// --- Components ---
+
+// 1. Header Component
+const Header: React.FC<{ project: Project; toggleSidebar: () => void }> = ({ project, toggleSidebar }) => {
+  return (
+    <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 md:px-6 shrink-0 z-20">
+      <div className="flex items-center">
+        <button 
+          onClick={toggleSidebar}
+          className="mr-4 p-2 text-gray-500 hover:bg-gray-100 rounded-lg md:hidden"
+        >
+          <Menu size={20} />
+        </button>
+        <div className="flex flex-col">
+          <h1 className="text-lg font-bold text-gray-900 leading-tight">{project.name}</h1>
+          <div className="flex items-center text-xs text-gray-500 mt-0.5">
+            <MapPin size={10} className="mr-1" />
+            {project.location}
+            <span className="mx-2">•</span>
+            <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium border ${
+              project.status === 'Active' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-600 border-gray-200'
+            }`}>
+              {project.status}
+            </span>
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex items-center space-x-3">
+        <button className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full transition-colors hidden sm:block">
+          <Settings size={20} />
+        </button>
+        <div className="h-8 w-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-xs">
+          JD
+        </div>
+      </div>
+    </header>
+  );
+};
+
+// 2. Sidebar Component
+const Sidebar: React.FC<{
+  isOpen: boolean;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+  onFolderSelect: (fileList: FileList) => void;
+}> = ({ isOpen, activeTab, setActiveTab, onFolderSelect }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const menuItems = [
+    { id: 'timelapse', label: 'Timelapse', icon: Clock },
+    { id: 'compare', label: 'Compare', icon: Sliders },
+    { id: 'live-view', label: 'Live View', icon: CameraIcon },
+  ];
+
+  return (
+    <>
+      {/* Mobile Overlay */}
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 z-20 md:hidden" />
+      )}
+
+      {/* Sidebar Content */}
+      <aside className={`
+        fixed md:relative z-30 flex flex-col w-64 h-full bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out
+        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
+        <div className="h-16 flex items-center px-6 border-b border-gray-200">
+          <div className="flex items-center space-x-2 text-indigo-600">
+            <div className="p-1.5 bg-indigo-600 rounded-lg">
+              <CameraIcon size={18} className="text-white" />
+            </div>
+            <span className="text-xl font-bold tracking-tight text-gray-900">Constvyu</span>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto py-6 px-3">
+          <nav className="space-y-1">
+            {menuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setActiveTab(item.id)}
+                  className={`
+                    w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
+                    ${isActive 
+                      ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200' 
+                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}
+                  `}
+                >
+                  <Icon size={18} className={isActive ? 'text-indigo-600' : 'text-gray-400'} />
+                  <span>{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="mt-8">
+            <h3 className="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              Data Source
+            </h3>
+            <div className="px-3">
+              <button 
+                onClick={handleFileClick}
+                className="w-full flex flex-col items-center justify-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all group cursor-pointer"
+              >
+                <FolderOpen size={24} className="text-gray-400 group-hover:text-indigo-500 mb-2" />
+                <span className="text-xs font-medium text-gray-600 group-hover:text-indigo-700">Import Local Folder</span>
+                <span className="text-[10px] text-gray-400 mt-1">Select folder with images</span>
+              </button>
+              {/* Hidden Input for Folder Selection */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                // @ts-ignore - webkitdirectory is non-standard but supported
+                webkitdirectory=""
+                directory=""
+                multiple
+                onChange={(e) => e.target.files && onFolderSelect(e.target.files)}
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="p-4 border-t border-gray-200">
+          <div className="bg-gradient-to-br from-indigo-600 to-indigo-700 rounded-xl p-4 text-white shadow-lg">
+            <h4 className="font-semibold text-sm mb-1">Pro Plan</h4>
+            <p className="text-xs text-indigo-100 mb-3">Access advanced AI analysis and 4K export.</p>
+            <button className="w-full py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium transition-colors border border-white/20">
+              Upgrade Now
+            </button>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
+};
+
+// 3. TimelapsePlayer Component
+const TimelapsePlayer: React.FC<{ 
+  frames: Frame[]; 
+  onFrameChange: (frame: Frame) => void 
+}> = ({ frames, onFrameChange }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [speed, setSpeed] = useState(1); // 1 = 100ms per frame base
+  const intervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (frames.length > 0) {
+      onFrameChange(frames[currentIndex]);
+    }
+  }, [currentIndex, frames, onFrameChange]);
+
+  const togglePlay = () => {
+    if (isPlaying) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    } else {
+      if (currentIndex === frames.length - 1) setCurrentIndex(0);
+    }
+    setIsPlaying(!isPlaying);
+  };
+
+  useEffect(() => {
+    if (isPlaying) {
+      const ms = 500 / speed; // Base 500ms divided by speed multiplier
+      intervalRef.current = window.setInterval(() => {
+        setCurrentIndex(prev => {
+          if (prev >= frames.length - 1) {
+            setIsPlaying(false);
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, ms);
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [isPlaying, frames.length, speed]);
+
+  const handleScrub = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value);
+    setCurrentIndex(val);
+    if (isPlaying) setIsPlaying(false);
+  };
+
+  const nextFrame = () => {
+    setCurrentIndex(prev => Math.min(prev + 1, frames.length - 1));
+    setIsPlaying(false);
+  };
+
+  const prevFrame = () => {
+    setCurrentIndex(prev => Math.max(prev - 1, 0));
+    setIsPlaying(false);
+  };
+
+  if (!frames.length) return null;
+
+  const currentFrame = frames[currentIndex];
+
+  return (
+    <div className="flex flex-col h-full bg-slate-900 rounded-lg overflow-hidden relative group">
+      {/* Main Viewport */}
+      <div className="flex-1 relative flex items-center justify-center bg-black min-h-0">
+        <img 
+          src={currentFrame.imageUrl} 
+          alt={`Frame ${currentFrame.date}`} 
+          className="max-h-full max-w-full object-contain"
+        />
+        
+        {/* Overlay Info */}
+        <div className="absolute top-4 left-4 bg-black/60 backdrop-blur-md text-white px-3 py-1.5 rounded-md border border-white/10 shadow-lg pointer-events-none">
+          <div className="text-sm font-mono font-bold">{currentFrame.date}</div>
+          <div className="text-xs text-gray-300">{currentFrame.time}</div>
+        </div>
+
+        {/* Action Overlay */}
+        <div className="absolute top-4 right-4 flex space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button className="p-2 bg-black/60 hover:bg-white/20 rounded-lg text-white backdrop-blur-sm transition-colors" title="Download Frame">
+            <Download size={16} />
+          </button>
+          <button className="p-2 bg-black/60 hover:bg-white/20 rounded-lg text-white backdrop-blur-sm transition-colors" title="Share">
+            <Share2 size={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* Controls Bar */}
+      <div className="bg-slate-800 border-t border-slate-700 p-4 shrink-0">
+        {/* Timeline Slider */}
+        <div className="mb-4 flex items-center space-x-3">
+          <span className="text-xs text-slate-400 font-mono w-12 text-right">
+            {(currentIndex + 1).toString().padStart(2, '0')} / {frames.length}
+          </span>
+          <div className="relative flex-1 h-8 flex items-center group/slider">
+            <input
+              type="range"
+              min="0"
+              max={frames.length - 1}
+              value={currentIndex}
+              onChange={handleScrub}
+              className="w-full h-1.5 bg-slate-600 rounded-full appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-indigo-500 hover:[&::-webkit-slider-thumb]:bg-indigo-400 [&::-webkit-slider-thumb]:transition-colors"
+            />
+            {/* Markers on timeline */}
+            <div className="absolute top-1/2 left-0 w-full h-1 -translate-y-1/2 pointer-events-none flex justify-between px-1 opacity-0 group-hover/slider:opacity-100 transition-opacity">
+               {frames.map((_, idx) => (
+                 <div key={idx} className={`w-0.5 h-2 rounded-full ${idx === currentIndex ? 'bg-indigo-500 h-3' : 'bg-slate-500'} transition-all`} />
+               ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Playback Controls */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="flex bg-slate-700 rounded-lg p-1 space-x-1">
+              {[0.5, 1, 2, 4].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setSpeed(s)}
+                  className={`px-2 py-1 text-xs font-medium rounded ${speed === s ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-slate-600'}`}
+                >
+                  {s}x
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-4">
+             <button onClick={() => setCurrentIndex(0)} className="text-slate-400 hover:text-white transition-colors">
+               <SkipBack size={20} />
+             </button>
+             <button onClick={prevFrame} className="text-slate-400 hover:text-white transition-colors">
+               <ChevronLeft size={24} />
+             </button>
+             
+             <button 
+               onClick={togglePlay}
+               className="w-12 h-12 bg-indigo-600 hover:bg-indigo-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-indigo-900/50 transition-all hover:scale-105 active:scale-95"
+             >
+               {isPlaying ? <Pause fill="currentColor" size={20} /> : <Play fill="currentColor" className="ml-1" size={20} />}
+             </button>
+
+             <button onClick={nextFrame} className="text-slate-400 hover:text-white transition-colors">
+               <ChevronRight size={24} />
+             </button>
+             <button onClick={() => setCurrentIndex(frames.length - 1)} className="text-slate-400 hover:text-white transition-colors">
+               <SkipForward size={20} />
+             </button>
+          </div>
+          
+          <div className="w-[140px] flex justify-end">
+             {/* Spacer to center controls */}
+             <div className="text-xs text-slate-500 font-mono">
+                {currentFrame.date}
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 4. CompareView Component
+const CompareView: React.FC<{ frames: Frame[] }> = ({ frames }) => {
+  const [leftIndex, setLeftIndex] = useState(0);
+  const [rightIndex, setRightIndex] = useState(frames.length - 1);
+  const [sliderPosition, setSliderPosition] = useState(50);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+      const percentage = (x / rect.width) * 100;
+      setSliderPosition(percentage);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+     if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      const x = Math.max(0, Math.min(e.touches[0].clientX - rect.left, rect.width));
+      const percentage = (x / rect.width) * 100;
+      setSliderPosition(percentage);
+    }
+  };
+
+  if (frames.length < 2) {
+    return (
+       <div className="flex-1 flex flex-col items-center justify-center bg-white rounded-xl border border-dashed border-gray-300">
+         <ImageIcon size={48} className="text-gray-300 mb-2" />
+         <p className="text-gray-500">Need at least 2 frames to compare.</p>
+       </div>
+    )
+  }
+
+  return (
+    <div className="flex-1 flex flex-col space-y-4 min-h-0">
+      <div className="flex space-x-4 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
+         <div className="flex-1">
+           <label className="text-xs font-semibold text-gray-500 mb-1 block">Left Image (Before)</label>
+           <select 
+             className="w-full p-2 text-sm border border-gray-200 rounded-lg bg-gray-50"
+             value={leftIndex}
+             onChange={(e) => setLeftIndex(Number(e.target.value))}
+           >
+             {frames.map((f, i) => (
+               <option key={f.id} value={i}>{f.date} {f.time}</option>
+             ))}
+           </select>
+         </div>
+         <div className="flex-1">
+           <label className="text-xs font-semibold text-gray-500 mb-1 block">Right Image (After)</label>
+           <select 
+             className="w-full p-2 text-sm border border-gray-200 rounded-lg bg-gray-50"
+             value={rightIndex}
+             onChange={(e) => setRightIndex(Number(e.target.value))}
+           >
+             {frames.map((f, i) => (
+               <option key={f.id} value={i}>{f.date} {f.time}</option>
+             ))}
+           </select>
+         </div>
+      </div>
+
+      <div className="flex-1 bg-slate-900 rounded-xl overflow-hidden relative shadow-lg border border-slate-700 select-none touch-none">
+        <div 
+          ref={containerRef}
+          className="absolute inset-0 cursor-ew-resize"
+          onMouseMove={e => e.buttons === 1 && handleMouseMove(e)}
+          onTouchMove={handleTouchMove}
+          onClick={handleMouseMove}
+        >
+          {/* Right Image (Background) */}
+          <div className="absolute inset-0">
+            <img 
+              src={frames[rightIndex].imageUrl} 
+              className="w-full h-full object-contain" 
+              alt="After"
+            />
+             <div className="absolute top-4 right-4 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur">
+              {frames[rightIndex].date}
+            </div>
+          </div>
+
+          {/* Left Image (Clipped on top) */}
+          <div 
+            className="absolute inset-0 overflow-hidden" 
+            style={{ width: `${sliderPosition}%`, borderRight: '2px solid white' }}
+          >
+            <div className="absolute inset-0 w-[100vw] sm:w-auto h-full"> {/* Fix for responsive clipping logic needed usually, simplified here */}
+               <img 
+                 src={frames[leftIndex].imageUrl} 
+                 className="w-full h-full object-contain object-left" 
+                 // Note: object-fit contain centers the image. For a true swipe compare of identical aspect ratios, 
+                 // we rely on the container size being consistent.
+                 style={{ width: containerRef.current?.offsetWidth, maxWidth: 'none' }}
+                 alt="Before"
+               />
+            </div>
+            <div className="absolute top-4 left-4 bg-black/50 text-white text-xs px-2 py-1 rounded backdrop-blur">
+              {frames[leftIndex].date}
+            </div>
+          </div>
+
+          {/* Slider Handle */}
+          <div 
+            className="absolute top-0 bottom-0 w-1 bg-white cursor-ew-resize shadow-[0_0_10px_rgba(0,0,0,0.5)] z-10 flex items-center justify-center"
+            style={{ left: `${sliderPosition}%`, transform: 'translateX(-50%)' }}
+          >
+            <div className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center text-indigo-600">
+              <Sliders size={16} className="rotate-90" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Main App Component ---
+
+const App: React.FC = () => {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('timelapse');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const [currentFrame, setCurrentFrame] = useState<Frame | null>(null);
+
+  // Data State
+  const [allFrames, setAllFrames] = useState<Frame[]>(MOCK_FRAMES);
+  const [isUsingLocalData, setIsUsingLocalData] = useState(false);
+
+  // Timelapse Configuration State
+  const [selectedCameraId, setSelectedCameraId] = useState(MOCK_CAMERAS[0].id);
+   
+  // Date State
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Set initial dates based on available data
+  useEffect(() => {
+    if (allFrames.length > 0) {
+      // Sort frames to find range
+      const sorted = [...allFrames].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const first = sorted[0].date;
+      const last = sorted[sorted.length - 1].date;
+      
+      setStartDate(first);
+      setEndDate(last);
+    }
+  }, [allFrames]);
+
+  // Filter frames based on date range
+  const filteredFrames = useMemo(() => {
+    return allFrames.filter(frame => {
+      return frame.date >= startDate && frame.date <= endDate;
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [startDate, endDate, allFrames]);
+
+  const handleQuickDuration = (days: number) => {
+    const end = new Date(endDate || new Date());
+    const start = new Date(end);
+    start.setDate(end.getDate() - days);
+    setStartDate(start.toISOString().split('T')[0]);
+  };
+
+  const handleAllTime = () => {
+     if (allFrames.length > 0) {
+        const sorted = [...allFrames].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        setStartDate(sorted[0].date);
+        setEndDate(sorted[sorted.length - 1].date);
+     }
+  };
+
+  // Logic to process uploaded folder
+  const handleFolderSelect = (fileList: FileList) => {
+    const newFrames: Frame[] = [];
+    const files = Array.from(fileList);
+
+    // Filter for images
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+
+    imageFiles.forEach((file, index) => {
+      // Try to parse date from filename
+      // Matches formats like: 2024-01-01, 20240101, 2024_01_01
+      const name = file.name;
+      let dateStr = '';
+      
+      // Regex for YYYY-MM-DD or YYYY_MM_DD
+      const isoMatch = name.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
+      // Regex for YYYYMMDD
+      const compactMatch = name.match(/(\d{4})(\d{2})(\d{2})/);
+
+      if (isoMatch) {
+        dateStr = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+      } else if (compactMatch) {
+        dateStr = `${compactMatch[1]}-${compactMatch[2]}-${compactMatch[3]}`;
+      } else {
+        // Fallback to last modified date
+        dateStr = new Date(file.lastModified).toISOString().split('T')[0];
+      }
+
+      const objectUrl = URL.createObjectURL(file);
+      
+      newFrames.push({
+        id: `local-${index}-${file.name}`,
+        date: dateStr,
+        time: new Date(file.lastModified).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        imageUrl: objectUrl,
+        thumbnailUrl: objectUrl // Use same for thumbnail in this local mode
+      });
+    });
+
+    if (newFrames.length > 0) {
+      // Sort by date
+      newFrames.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      setAllFrames(newFrames);
+      setIsUsingLocalData(true);
+      // Reset dates to new range
+      setStartDate(newFrames[0].date);
+      setEndDate(newFrames[newFrames.length - 1].date);
+      // eslint-disable-next-line no-alert
+      alert(`Successfully loaded ${newFrames.length} images from folder.`);
+    } else {
+      // eslint-disable-next-line no-alert
+      alert("No valid images found in the selected folder.");
+    }
+  };
+
+  return (
+    <div className="flex h-screen w-full bg-gray-50 overflow-hidden font-sans">
+      {/* Sidebar */}
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab}
+        onFolderSelect={handleFolderSelect}
+      />
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+        <Header 
+          project={MOCK_PROJECT} 
+          toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} 
+        />
+
+        <main className="flex-1 p-4 md:p-6 overflow-hidden relative flex flex-col">
+          {activeTab === 'timelapse' ? (
+             <div className="flex-1 flex flex-col min-h-0 space-y-4">
+               
+               {/* Header Area */}
+               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+                 <div>
+                   <h1 className="text-2xl font-bold text-gray-800 flex items-center">
+                     Timelapse Monitor
+                     {isUsingLocalData && <span className="ml-3 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full border border-green-200 font-medium">Local Source</span>}
+                   </h1>
+                   <p className="text-sm text-gray-500 mt-1">Configure camera source and duration to generate timelapse.</p>
+                 </div>
+               </div>
+
+               {/* Configuration Toolbar */}
+               <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col xl:flex-row xl:items-end gap-5 shrink-0">
+                  
+                  {/* Camera Select (Visual only if using local data, but functional for UI consistency) */}
+                  <div className="flex-1 min-w-[240px]">
+                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center">
+                      <CameraIcon size={12} className="mr-1.5"/> Source
+                    </label>
+                    <div className="relative">
+                      {isUsingLocalData ? (
+                        <div className="w-full pl-3 pr-10 py-2.5 bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg font-medium flex items-center">
+                           <FolderOpen size={16} className="mr-2 text-indigo-600"/>
+                           Local Folder Import
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <select 
+                            value={selectedCameraId}
+                            onChange={(e) => setSelectedCameraId(e.target.value)}
+                            className="w-full pl-3 pr-10 py-2.5 bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none outline-none font-medium"
+                          >
+                            {MOCK_CAMERAS.map(cam => (
+                              <option key={cam.id} value={cam.id}>
+                                {cam.name} ({cam.status})
+                              </option>
+                            ))}
+                          </select>
+                          <div className="absolute right-3 top-3 pointer-events-none text-gray-500">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Duration Selector */}
+                  <div className="flex-[2] flex flex-col md:flex-row gap-3">
+                    <div className="flex-1">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center">
+                        <Calendar size={12} className="mr-1.5"/> Start Date
+                      </label>
+                      <input 
+                        type="date" 
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        max={endDate}
+                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5 flex items-center">
+                          End Date
+                      </label>
+                      <input 
+                        type="date" 
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        min={startDate}
+                        className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 text-gray-800 text-sm rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Quick Filters */}
+                  <div className="flex gap-2 pb-1">
+                    <button 
+                      onClick={() => handleQuickDuration(7)}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                    >
+                      Last 7 Days
+                    </button>
+                    <button 
+                      onClick={() => handleQuickDuration(30)}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                    >
+                      Last 30 Days
+                    </button>
+                    <button 
+                      onClick={handleAllTime}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                    >
+                      All Time
+                    </button>
+                  </div>
+
+                  {/* Update Button */}
+                  <div className="pb-0.5">
+                    <button className="flex items-center justify-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all text-sm font-medium w-full md:w-auto">
+                      <RefreshCw size={16} />
+                      <span>Update View</span>
+                    </button>
+                  </div>
+               </div>
+
+               {/* Player Section */}
+               <div className="flex-1 min-h-0 bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden flex flex-col">
+                 <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                    <div className="text-xs font-medium text-gray-500 flex items-center">
+                      <Filter size={12} className="mr-1.5" />
+                      Showing {filteredFrames.length} frames from {startDate} to {endDate}
+                    </div>
+                    {filteredFrames.length === 0 && (
+                      <span className="text-xs text-red-500 font-bold">No frames found in this range. Select a source folder.</span>
+                    )}
+                 </div>
+                 
+                 <div className="flex-1 relative">
+                    {filteredFrames.length > 0 ? (
+                      <TimelapsePlayer 
+                        frames={filteredFrames} 
+                        onFrameChange={setCurrentFrame}
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center flex-col text-gray-400">
+                        <FolderOpen size={48} className="mb-3 opacity-20" />
+                        <p>No images available. Please Import Source Folder from the sidebar.</p>
+                      </div>
+                    )}
+                 </div>
+               </div>
+             </div>
+          ) : activeTab === 'compare' ? (
+            <CompareView frames={allFrames} />
+          ) : activeTab === 'live-view' ? (
+            <div className="flex-1 flex flex-col h-full bg-slate-900 rounded-xl overflow-hidden shadow-2xl border border-slate-700 relative">
+               <div className="absolute top-0 left-0 right-0 p-4 bg-gradient-to-b from-black/70 to-transparent z-10 flex justify-between items-start">
+                 <div>
+                   <h2 className="text-white font-bold text-lg flex items-center">
+                     <div className="w-2 h-2 bg-red-500 rounded-full mr-2 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                     Live Camera View
+                   </h2>
+                   <p className="text-gray-300 text-xs mt-1">
+                      {isUsingLocalData ? "Showing latest image from source folder" : "Live Stream - Camera 01 (Tower Crane)"}
+                   </p>
+                 </div>
+                 <div className="bg-black/50 backdrop-blur-md px-3 py-1 rounded border border-white/10 text-white text-xs font-mono">
+                   {allFrames.length > 0 ? allFrames[allFrames.length - 1].date : 'No Signal'}
+                 </div>
+               </div>
+               
+               <div className="flex-1 flex items-center justify-center bg-black">
+                 {allFrames.length > 0 ? (
+                   <img 
+                     src={allFrames[allFrames.length - 1].imageUrl} 
+                     className="max-w-full max-h-full object-contain"
+                     alt="Latest Live View"
+                   />
+                 ) : (
+                    <div className="text-gray-500 flex flex-col items-center">
+                       <CameraIcon size={48} className="mb-4 opacity-20"/>
+                       <span>No Signal / No Source Selected</span>
+                    </div>
+                 )}
+               </div>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
+               <div className="p-8 bg-white rounded-2xl border border-gray-200 shadow-sm text-center max-w-md">
+                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                   <span className="text-2xl">🚧</span>
+                 </div>
+                 <h2 className="text-xl font-bold text-gray-800 mb-2">Under Construction</h2>
+                 <p className="text-sm">The <strong>{activeTab}</strong> module is currently being built. Please return to the Timelapse view.</p>
+                 <button 
+                   onClick={() => setActiveTab('timelapse')}
+                   className="mt-6 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium text-sm"
+                 >
+                   Back to Timelapse
+                 </button>
+               </div>
+            </div>
+          )}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default App;
