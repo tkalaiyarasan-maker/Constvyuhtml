@@ -3,777 +3,484 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Constvyu - Construction Timelapse Dashboard</title>
-    
-    <!-- Tailwind CSS -->
+    <title>ContractAI Analyst (Local)</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Fonts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff', 100: '#e0f2fe', 500: '#0ea5e9',
+                            600: '#0284c7', 700: '#0369a1', 900: '#0c4a6e',
+                        }
+                    }
+                },
+            },
+        }
+    </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- React & ReactDOM -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    
-    <!-- Babel for JSX -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f9fafb; }
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
-        /* Range slider styling */
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 16px;
-            width: 16px;
-            border-radius: 50%;
-            background: #6366f1;
-            cursor: pointer;
-            margin-top: -6px;
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%;
-            height: 4px;
-            cursor: pointer;
-            background: #475569;
-            border-radius: 2px;
-        }
-        
-        /* Animation for recording indicator */
-        @keyframes pulse-red {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-            70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-        .recording-pulse {
-            animation: pulse-red 2s infinite;
-        }
+        body { font-family: 'Inter', sans-serif; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
-<body>
-    <div id="root"></div>
+<body class="bg-slate-50 text-slate-900 h-screen overflow-hidden">
+    <div id="root" class="h-full"></div>
 
-    <script type="text/babel">
-        const { useState, useMemo, useEffect, useRef } = React;
+    <script type="module">
+        // Using explicit versions and dependencies to ensure Single React Instance
+        import React, { useState, useEffect, useRef } from "https://esm.sh/react@18.2.0";
+        import { createRoot } from "https://esm.sh/react-dom@18.2.0/client";
+        import ReactMarkdown from "https://esm.sh/react-markdown@9.0.1?deps=react@18.2.0,react-dom@18.2.0";
 
-        // --- Icons Helper ---
-        const Icon = ({ name, size = 24, className = "" }) => {
-            const ref = useRef(null);
-            useEffect(() => {
-                if (window.lucide && ref.current) {
-                    const iconNode = window.lucide.icons[name];
-                    if (iconNode) {
-                        const svgElement = iconNode.toSvg({
-                            class: className,
-                            width: size,
-                            height: size,
-                            "stroke-width": 2
-                        });
-                        ref.current.innerHTML = svgElement;
-                    }
-                }
-            }, [name, size, className]);
-            return <span ref={ref} className="inline-flex items-center justify-center" />;
-        };
+        // --- CONFIGURATION ---
+        const apiKey = ""; // API Key set at top level for environment injection
 
-        // --- Constants ---
-        const MOCK_PROJECT = {
-            id: 'PRJ-2024-001',
-            name: 'Skyline Plaza Redevelopment',
-            location: '124 Market St, Downtown',
-            startDate: '2024-01-15',
-            status: 'Active'
-        };
+        // --- ICONS (Inline SVGs) ---
+        const IconBase = ({ children, className }) => React.createElement('svg', { 
+            xmlns: "http://www.w3.org/2000/svg", 
+            width: "24", height: "24", viewBox: "0 0 24 24", 
+            fill: "none", stroke: "currentColor", strokeWidth: "2", 
+            strokeLinecap: "round", strokeLinejoin: "round", 
+            className 
+        }, children);
 
-        const MOCK_CAMERAS = [
-            { id: 'cam-01', name: 'Tower Crane 1', status: 'Online', location: 'North Elevation' },
-            { id: 'cam-02', name: 'Gate Entry', status: 'Online', location: 'Main Entrance' },
-        ];
+        const Layout = (props) => React.createElement(IconBase, props, React.createElement("rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", ry: "2" }), React.createElement("line", { x1: "3", x2: "21", y1: "9", y2: "9" }), React.createElement("line", { x1: "9", x2: "9", y1: "21", y2: "9" }));
+        const FileText = (props) => React.createElement(IconBase, props, React.createElement("path", { d: "M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" }), React.createElement("polyline", { points: "14 2 14 8 20 8" }), React.createElement("line", { x1: "16", x2: "8", y1: "13", y2: "13" }), React.createElement("line", { x1: "16", x2: "8", y1: "17", y2: "17" }), React.createElement("line", { x1: "10", x2: "8", y1: "9", y2: "9" }));
+        const Trash2 = (props) => React.createElement(IconBase, props, React.createElement("path", { d: "M3 6h18" }), React.createElement("path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" }), React.createElement("path", { d: "M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" }), React.createElement("line", { x1: "10", x2: "10", y1: "11", y2: "17" }), React.createElement("line", { x1: "14", x2: "14", y1: "11", y2: "17" }));
+        const CheckCircle2 = (props) => React.createElement(IconBase, props, React.createElement("circle", { cx: "12", cy: "12", r: "10" }), React.createElement("path", { d: "m9 12 2 2 4-4" }));
+        const RotateCw = (props) => React.createElement(IconBase, props, React.createElement("path", { d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" }), React.createElement("path", { d: "M21 3v5h-5" }));
+        const Database = (props) => React.createElement(IconBase, props, React.createElement("ellipse", { cx: "12", cy: "5", rx: "9", ry: "3" }), React.createElement("path", { d: "M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" }), React.createElement("path", { d: "M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" }));
+        const UploadCloud = (props) => React.createElement(IconBase, props, React.createElement("path", { d: "M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" }), React.createElement("path", { d: "M12 12v9" }), React.createElement("path", { d: "m16 16-4-4-4 4" }));
+        const Send = (props) => React.createElement(IconBase, props, React.createElement("path", { d: "m22 2-7 20-4-9-9-4Z" }), React.createElement("path", { d: "M22 2 11 13" }));
+        const Bot = (props) => React.createElement(IconBase, props, React.createElement("path", { d: "M12 8V4H8" }), React.createElement("rect", { width: "16", height: "12", x: "4", y: "8", rx: "2" }), React.createElement("path", { d: "M2 14h2" }), React.createElement("path", { d: "M20 14h2" }), React.createElement("path", { d: "M15 13v2" }), React.createElement("path", { d: "M9 13v2" }));
+        const User = (props) => React.createElement(IconBase, props, React.createElement("path", { d: "M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" }), React.createElement("circle", { cx: "12", cy: "7", r: "4" }));
+        const AlertTriangle = (props) => React.createElement(IconBase, props, React.createElement("path", { d: "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" }), React.createElement("path", { d: "M12 9v4" }), React.createElement("path", { d: "M12 17h.01" }));
+        const Loader2 = (props) => React.createElement(IconBase, props, React.createElement("path", { d: "M21 12a9 9 0 1 1-6.219-8.56" }));
 
-        // Generate sequential mock frames
-        const generateMockFrames = () => {
-            const frames = [];
-            const baseDate = new Date('2024-01-01');
-            
-            // Generate 10 frames, one week apart
-            for (let i = 0; i < 10; i++) {
-                const date = new Date(baseDate);
-                date.setDate(baseDate.getDate() + (i * 7));
-                
-                const dateStr = date.toISOString().split('T')[0];
-                const progress = (i + 1) * 10;
-                // Alternating colors to visualize change
-                const color = i % 2 === 0 ? '1e40af' : '3b82f6'; 
-                
-                frames.push({
-                    id: `mock-${i}`,
-                    date: dateStr,
-                    time: '10:00 AM',
-                    imageUrl: `https://placehold.co/1200x800/${color}/FFFFFF/png?text=Week+${i+1}+(${dateStr})`,
-                    thumbnailUrl: `https://placehold.co/300x200/${color}/FFFFFF/png?text=W${i+1}`
-                });
+        // --- SERVICES ---
+
+        // 1. PDF Service
+        const loadPdfJs = async () => {
+            if (window.pdfjsLib) return;
+            // Poll for library availability
+            let attempts = 0;
+            while (attempts < 20) {
+                if (window.pdfjsLib) return;
+                await new Promise(r => setTimeout(r, 200));
+                attempts++;
             }
-            return frames;
+            throw new Error("PDF.js library failed to load");
         };
 
-        const MOCK_FRAMES = generateMockFrames();
-
-        // --- Components ---
-
-        const Header = ({ project, toggleSidebar }) => {
-            return (
-                <header className="bg-white border-b border-gray-200 h-16 flex items-center justify-between px-4 md:px-6 shrink-0 z-20">
-                    <div className="flex items-center">
-                        <button onClick={toggleSidebar} className="mr-4 p-2 text-gray-500 hover:bg-gray-100 rounded-lg md:hidden">
-                            <Icon name="menu" size={20} />
-                        </button>
-                        <div className="flex flex-col">
-                            <h1 className="text-lg font-bold text-gray-900 leading-tight">{project.name}</h1>
-                            <div className="flex items-center text-xs text-gray-500 mt-0.5">
-                                <span className="flex items-center mr-1"><Icon name="map-pin" size={10} className="mr-1"/></span>
-                                {project.location}
-                                <span className="mx-2">•</span>
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-medium border bg-green-50 text-green-700 border-green-200">
-                                    {project.status}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex items-center space-x-3">
-                        <div className="h-8 w-8 rounded-full bg-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 font-bold text-xs">
-                            JD
-                        </div>
-                    </div>
-                </header>
-            );
-        };
-
-        const Sidebar = ({ isOpen, activeTab, setActiveTab, onFolderSelect }) => {
-            const fileInputRef = useRef(null);
-            const menuItems = [
-                { id: 'timelapse', label: 'Timelapse', iconName: 'clock' },
-                { id: 'compare', label: 'Compare', iconName: 'sliders-horizontal' },
-                { id: 'live-view', label: 'Live View', iconName: 'camera' },
-            ];
-
-            return (
-                <>
-                    {isOpen && <div className="fixed inset-0 bg-black/50 z-20 md:hidden" />}
-                    <aside className={`fixed md:relative z-30 flex flex-col w-64 h-full bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-                        <div className="h-16 flex items-center px-6 border-b border-gray-200">
-                            <div className="flex items-center space-x-2 text-indigo-600">
-                                <Icon name="camera" size={24} className="text-indigo-600" />
-                                <span className="text-xl font-bold tracking-tight text-gray-900">Constvyu</span>
-                            </div>
-                        </div>
-                        <div className="flex-1 overflow-y-auto py-6 px-3">
-                            <nav className="space-y-1">
-                                {menuItems.map((item) => (
-                                    <button
-                                        key={item.id}
-                                        onClick={() => setActiveTab(item.id)}
-                                        className={`w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${activeTab === item.id ? 'bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200' : 'text-gray-600 hover:bg-gray-50'}`}
-                                    >
-                                        <Icon name={item.iconName} size={18} className={activeTab === item.id ? 'text-indigo-600' : 'text-gray-400'} />
-                                        <span>{item.label}</span>
-                                    </button>
-                                ))}
-                            </nav>
-                            <div className="mt-8 px-3">
-                                <button 
-                                    onClick={() => fileInputRef.current?.click()}
-                                    className="w-full flex flex-col items-center justify-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 transition-all group cursor-pointer"
-                                >
-                                    <div className="text-gray-400 group-hover:text-indigo-500 mb-2">
-                                        <Icon name="folder-open" size={24} />
-                                    </div>
-                                    <span className="text-xs font-medium text-gray-600">Import Local Folder</span>
-                                </button>
-                                <input type="file" ref={fileInputRef} className="hidden" webkitdirectory="" directory="" multiple onChange={(e) => e.target.files && onFolderSelect(e.target.files)} />
-                            </div>
-                        </div>
-                    </aside>
-                </>
-            );
-        };
-
-        // --- TIMELAPSE PLAYER (Enhanced) ---
-        const TimelapsePlayer = ({ frames, onFrameChange }) => {
-            const sortedFrames = useMemo(() => {
-                return [...frames].sort((a, b) => new Date(a.date) - new Date(b.date));
-            }, [frames]);
-
-            const [currentIndex, setCurrentIndex] = useState(0);
-            const [isPlaying, setIsPlaying] = useState(false);
-            const [speed, setSpeed] = useState(2); 
-            const [isExporting, setIsExporting] = useState(false);
-            const intervalRef = useRef(null);
-
-            useEffect(() => {
-                if (sortedFrames.length > 0) {
-                    onFrameChange(sortedFrames[currentIndex]);
-                }
-            }, [currentIndex, sortedFrames, onFrameChange]);
-
-            const togglePlay = () => {
-                if (isPlaying) {
-                    clearInterval(intervalRef.current);
-                } else {
-                    if (currentIndex === sortedFrames.length - 1) setCurrentIndex(0);
-                }
-                setIsPlaying(!isPlaying);
-            };
-
-            useEffect(() => {
-                if (isPlaying) {
-                    const ms = 500 / speed;
-                    intervalRef.current = window.setInterval(() => {
-                        setCurrentIndex(prev => {
-                            if (prev >= sortedFrames.length - 1) {
-                                setIsPlaying(false);
-                                return prev;
-                            }
-                            return prev + 1;
-                        });
-                    }, ms);
-                } else {
-                    clearInterval(intervalRef.current);
-                }
-                return () => clearInterval(intervalRef.current);
-            }, [isPlaying, sortedFrames.length, speed]);
-
-            // --- Download Video Logic (FIXED) ---
-            const handleDownloadVideo = async () => {
-                if (isExporting || sortedFrames.length === 0) return;
-                setIsExporting(true);
-
-                try {
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    
-                    // Load first image to set dimensions
-                    const firstImg = new Image();
-                    firstImg.crossOrigin = "anonymous";
-                    await new Promise((resolve, reject) => {
-                        firstImg.onload = resolve;
-                        firstImg.onerror = () => reject("Failed to load first image. Tainted canvas issue possible.");
-                        firstImg.src = sortedFrames[0].imageUrl;
-                    });
-                    
-                    canvas.width = firstImg.naturalWidth || 1920;
-                    canvas.height = firstImg.naturalHeight || 1080;
-                    
-                    // Setup recorder
-                    const stream = canvas.captureStream(30); // 30 FPS stream
-                    let mimeType = 'video/webm';
-                    if (MediaRecorder.isTypeSupported('video/mp4')) {
-                        mimeType = 'video/mp4';
-                    } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
-                        mimeType = 'video/webm;codecs=vp9';
-                    }
-
-                    const recorder = new MediaRecorder(stream, { mimeType });
-                    const chunks = [];
-                    recorder.ondataavailable = (e) => {
-                        if (e.data.size > 0) chunks.push(e.data);
-                    };
-                    
-                    recorder.start();
-
-                    // Play frames onto canvas
-                    for (let i = 0; i < sortedFrames.length; i++) {
-                        const img = new Image();
-                        img.crossOrigin = "anonymous"; // Important for CORS
-                        await new Promise((resolve, reject) => {
-                            img.onload = resolve;
-                            img.onerror = () => {
-                                console.warn(`Skipping broken frame ${i}`);
-                                resolve(); // Skip error to keep recording
-                            };
-                            img.src = sortedFrames[i].imageUrl;
-                        });
+        const extractTextFromPDF = async (file, onProgress) => {
+            await loadPdfJs();
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = async (event) => {
+                    try {
+                        const typedarray = new Uint8Array(event.target?.result);
+                        if (!window.pdfjsLib) throw new Error("PDF.js library not loaded");
                         
-                        // Clear and draw
-                        ctx.fillStyle = 'black';
-                        ctx.fillRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        
-                        // Add overlay text
-                        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                        ctx.fillRect(20, 20, 350, 60);
-                        ctx.fillStyle = 'white';
-                        ctx.font = 'bold 30px Arial';
-                        ctx.fillText(sortedFrames[i].date, 40, 60);
+                        const pdf = await window.pdfjsLib.getDocument(typedarray).promise;
+                        const maxPages = pdf.numPages;
+                        let fullText = '';
 
-                        // Manually trigger stream update if needed, but drawing should suffice.
-                        // Wait a bit to simulate frame duration (approx 200ms per frame in video)
-                        await new Promise(r => setTimeout(r, 200)); 
-                    }
-                    
-                    // Stop recorder
-                    recorder.stop();
-                    
-                    // Wait for stop event
-                    await new Promise(resolve => {
-                         recorder.onstop = resolve;
-                    });
+                        for (let i = 1; i <= maxPages; i++) {
+                            const page = await pdf.getPage(i);
+                            const textContent = await page.getTextContent();
+                            const pageText = textContent.items.map((item) => item.str).join(' ');
+                            fullText += `--- Page ${i} ---\n${pageText}\n\n`;
+                            onProgress(i, maxPages);
+                        }
 
-                    // Create blob after stop
-                    if (chunks.length > 0) {
-                        const blob = new Blob(chunks, { type: mimeType });
-                        const url = URL.createObjectURL(blob);
-                        const a = document.createElement('a');
-                        a.href = url;
-                        a.download = `timelapse-${sortedFrames[0].date}-to-${sortedFrames[sortedFrames.length-1].date}.${mimeType === 'video/mp4' ? 'mp4' : 'webm'}`;
-                        document.body.appendChild(a);
-                        a.click();
-                        document.body.removeChild(a);
-                    } else {
-                        throw new Error("No video data recorded. Canvas might be tainted or recorder failed.");
-                    }
-                    
-                    setIsExporting(false);
-
-                } catch (err) {
-                    console.error("Export failed:", err);
-                    alert("Could not generate video. If using placeholder images, this is likely due to browser CORS security policies preventing canvas recording.");
-                    setIsExporting(false);
-                }
-            };
-
-            const currentFrame = sortedFrames[currentIndex];
-            if (!sortedFrames.length) return null;
-
-            return (
-                <div className="flex flex-col h-full bg-slate-900 rounded-xl overflow-hidden shadow-2xl relative group">
-                    {/* Main Viewport */}
-                    <div className="flex-1 relative flex items-center justify-center bg-black min-h-0">
-                        <img 
-                            src={currentFrame.imageUrl} 
-                            alt={`Frame ${currentFrame.date}`} 
-                            className="w-full h-full object-contain"
-                        />
-                        
-                        <div className="absolute top-6 left-6 bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-lg border border-white/10 shadow-lg pointer-events-none">
-                            <div className="text-lg font-mono font-bold tracking-wider">{currentFrame.date}</div>
-                            <div className="text-xs text-gray-300 mt-1">
-                                {currentFrame.time} • Frame {currentIndex + 1}/{sortedFrames.length}
-                            </div>
-                        </div>
-
-                        {isExporting && (
-                            <div className="absolute inset-0 bg-black/80 z-50 flex flex-col items-center justify-center text-white">
-                                <div className="w-16 h-16 border-4 border-t-indigo-500 border-white/20 rounded-full animate-spin mb-4"></div>
-                                <h3 className="text-xl font-bold">Rendering Video...</h3>
-                                <p className="text-gray-400 text-sm mt-2">Please wait while we process frames</p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Controls Bar */}
-                    <div className="bg-slate-800 border-t border-slate-700 p-4 shrink-0">
-                        {/* Timeline Slider */}
-                        <div className="mb-4 flex items-center space-x-4">
-                            <span className="text-xs text-slate-400 font-mono w-16 text-right">
-                                {(currentIndex + 1).toString().padStart(2, '0')} / {sortedFrames.length}
-                            </span>
-                            <input
-                                type="range"
-                                min="0"
-                                max={sortedFrames.length - 1}
-                                value={currentIndex}
-                                onChange={(e) => {
-                                    setCurrentIndex(parseInt(e.target.value));
-                                    setIsPlaying(false);
-                                }}
-                                className="flex-1 h-2 bg-slate-600 rounded-full appearance-none cursor-pointer"
-                            />
-                        </div>
-
-                        {/* Action Buttons */}
-                        <div className="flex items-center justify-between">
-                            <div className="flex bg-slate-700 rounded-lg p-1 space-x-1">
-                                {[0.5, 1, 2, 4].map((s) => (
-                                    <button 
-                                        key={s} 
-                                        onClick={() => setSpeed(s)} 
-                                        className={`px-3 py-1.5 text-xs font-medium rounded transition-colors ${speed === s ? 'bg-indigo-600 text-white' : 'text-slate-300 hover:text-white hover:bg-slate-600'}`}
-                                    >
-                                        {s}x
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="flex items-center space-x-6">
-                                <button onClick={() => { setCurrentIndex(0); setIsPlaying(false); }} className="text-slate-400 hover:text-white transition-colors p-1">
-                                    <Icon name="skip-back" size={20} />
-                                </button>
-                                
-                                {/* RECTANGULAR PLAY BUTTON (User Request) */}
-                                <button 
-                                    onClick={togglePlay} 
-                                    className={`
-                                        flex items-center space-x-2 px-6 py-2 rounded-lg font-bold shadow-lg transition-all border-2 
-                                        ${isPlaying 
-                                            ? 'bg-slate-700 border-slate-600 text-white hover:bg-slate-600' 
-                                            : 'bg-indigo-600 border-indigo-400 text-white hover:bg-indigo-500 hover:scale-105 active:scale-95'
-                                        }
-                                    `}
-                                >
-                                    {isPlaying ? (
-                                        <>
-                                            <Icon name="pause" size={20} className="fill-current" />
-                                            <span>Pause</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Icon name="play" size={20} className="fill-current" />
-                                            <span>Play</span>
-                                        </>
-                                    )}
-                                </button>
-                                
-                                <button onClick={() => { setCurrentIndex(sortedFrames.length - 1); setIsPlaying(false); }} className="text-slate-400 hover:text-white transition-colors p-1">
-                                    <Icon name="skip-forward" size={20} />
-                                </button>
-                            </div>
-
-                            <button 
-                                onClick={handleDownloadVideo}
-                                disabled={isExporting}
-                                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                    isExporting ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-slate-700 text-white hover:bg-slate-600'
-                                }`}
-                            >
-                                <Icon name="download" size={16} />
-                                <span>{isExporting ? 'Exporting...' : 'Download Video'}</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
-
-        // --- COMPARE VIEW ---
-        const CompareView = ({ frames, leftIndex, setLeftIndex, rightIndex, setRightIndex }) => {
-            const [sliderPosition, setSliderPosition] = useState(50);
-            const containerRef = useRef(null);
-            const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
-
-            const sortedFrames = useMemo(() => {
-                return [...frames].sort((a, b) => new Date(a.date) - new Date(b.date));
-            }, [frames]);
-
-            useEffect(() => {
-                if (!containerRef.current) return;
-                const updateDimensions = () => {
-                    if (containerRef.current) {
-                        const { width, height } = containerRef.current.getBoundingClientRect();
-                        setContainerDimensions({ width, height });
+                        resolve({ text: fullText, pageCount: maxPages });
+                    } catch (error) {
+                        reject(error);
                     }
                 };
-                updateDimensions();
-                const observer = new ResizeObserver(updateDimensions);
-                observer.observe(containerRef.current);
-                window.addEventListener('resize', updateDimensions);
-                return () => {
-                    observer.disconnect();
-                    window.removeEventListener('resize', updateDimensions);
-                };
+                reader.onerror = (error) => reject(error);
+                reader.readAsArrayBuffer(file);
+            });
+        };
+
+        // 2. Storage Service (LOCAL STORAGE IMPLEMENTATION)
+        const useStorage = () => {
+            const [loading, setLoading] = useState(true);
+
+            // Simulating a delay to mimic async behavior
+            useEffect(() => {
+                setTimeout(() => setLoading(false), 500);
             }, []);
 
-            const handleMove = (clientX) => {
-                if (!containerRef.current) return;
-                const rect = containerRef.current.getBoundingClientRect();
-                const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
-                const percentage = (x / rect.width) * 100;
-                setSliderPosition(percentage);
+            const getAllFiles = async () => {
+                try {
+                    const metadata = JSON.parse(localStorage.getItem('contractai_metadata') || '[]');
+                    // Hydrate with content from separate keys
+                    const files = metadata.map(file => {
+                        const content = localStorage.getItem(`contractai_content_${file.id}`) || '';
+                        return { ...file, content };
+                    });
+                    return files.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
+                } catch (e) {
+                    console.error("Local Storage Error", e);
+                    return [];
+                }
             };
 
-            if (frames.length < 2) return <div className="w-full h-full bg-white rounded-xl flex items-center justify-center text-gray-400">Need 2+ frames to compare</div>;
+            const saveFile = async (file) => {
+                try {
+                    const metadata = JSON.parse(localStorage.getItem('contractai_metadata') || '[]');
+                    const newMetadata = [...metadata, {
+                        id: file.id,
+                        name: file.name,
+                        size: file.size,
+                        pageCount: file.pageCount,
+                        status: file.status,
+                        uploadedAt: file.uploadedAt
+                    }];
+                    
+                    // Save content separately to avoid massive JSON parsing for list
+                    try {
+                        localStorage.setItem(`contractai_content_${file.id}`, file.content);
+                        localStorage.setItem('contractai_metadata', JSON.stringify(newMetadata));
+                    } catch (quotaError) {
+                        alert("Storage Quota Exceeded! Your browser's Local Storage is full. Please delete some old contracts.");
+                        console.error("Quota Exceeded", quotaError);
+                    }
+                } catch (e) {
+                    console.error("Error saving file locally:", e);
+                }
+            };
 
-            // Ensure indices are within bounds
-            const safeLeft = Math.min(leftIndex, sortedFrames.length - 1);
-            const safeRight = Math.min(rightIndex, sortedFrames.length - 1);
+            const deleteFile = async (id) => {
+                try {
+                    const metadata = JSON.parse(localStorage.getItem('contractai_metadata') || '[]');
+                    const newMetadata = metadata.filter(f => f.id !== id);
+                    localStorage.setItem('contractai_metadata', JSON.stringify(newMetadata));
+                    localStorage.removeItem(`contractai_content_${id}`);
+                } catch (e) {
+                    console.error("Error deleting file:", e);
+                }
+            };
 
-            return (
-                <div className="flex-1 flex flex-col min-h-0 h-full">
-                    {/* Viewport - Takes full height now, controls moved to sidebar */}
-                    <div className="flex-1 bg-slate-900 rounded-xl overflow-hidden relative shadow-lg border border-slate-700 select-none touch-none flex items-center justify-center">
-                        <div 
-                            ref={containerRef}
-                            className="relative w-full h-full cursor-ew-resize overflow-hidden"
-                            onMouseMove={(e) => e.buttons === 1 && handleMove(e.clientX)}
-                            onTouchMove={(e) => handleMove(e.touches[0].clientX)}
-                            onClick={(e) => handleMove(e.clientX)}
-                        >
-                            <img src={sortedFrames[safeRight].imageUrl} className="absolute inset-0 w-full h-full object-contain object-center pointer-events-none select-none" alt="After" />
-                            <div className="absolute inset-y-0 left-0 overflow-hidden border-r-2 border-white/80 shadow-[2px_0_10px_rgba(0,0,0,0.3)]" style={{ width: `${sliderPosition}%` }}>
-                                <div style={{ width: containerDimensions.width, height: containerDimensions.height }}>
-                                    <img src={sortedFrames[safeLeft].imageUrl} className="w-full h-full object-contain object-center pointer-events-none select-none" alt="Before" />
-                                </div>
-                            </div>
-                            <div className="absolute inset-y-0 pointer-events-none flex items-center justify-center" style={{ left: `${sliderPosition}%`, transform: 'translateX(-50%)' }}>
-                                <div className="w-8 h-8 bg-white rounded-full shadow-lg flex items-center justify-center text-indigo-600">
-                                    <Icon name="sliders-horizontal" size={16} />
-                                </div>
-                            </div>
-                            <div className="absolute top-4 left-4 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur pointer-events-none">{sortedFrames[safeLeft].date} (Before)</div>
-                            <div className="absolute top-4 right-4 bg-black/60 text-white text-xs px-2 py-1 rounded backdrop-blur pointer-events-none">{sortedFrames[safeRight].date} (After)</div>
-                        </div>
-                    </div>
-                </div>
+            const clearAllFiles = async (files) => {
+                localStorage.removeItem('contractai_metadata');
+                files.forEach(f => localStorage.removeItem(`contractai_content_${f.id}`));
+            }
+
+            return { saveFile, deleteFile, getAllFiles, clearAllFiles, loading, setLoading };
+        };
+
+        // 3. Gemini Service
+        const sendMessageToGemini = async (history, currentContext, userMessage) => {
+            // Offline check
+            if (!navigator.onLine) {
+                return "⚠️ **OFFLINE MODE DETECTED**\n\nI cannot analyze documents while offline because the AI model runs on Google's cloud servers. \n\nYou can still extract text from PDFs and view your saved documents, but you must connect to the internet to chat with the AI.";
+            }
+
+            // Robust Key Handling: Environment -> LocalStorage -> Prompt
+            let currentKey = apiKey;
+            if (!currentKey) {
+                currentKey = localStorage.getItem("gemini_api_key") || "";
+            }
+            if (!currentKey) {
+                const userKey = prompt("API Key not detected. Please enter your Gemini API Key (it will be saved locally):");
+                if (userKey) {
+                    localStorage.setItem("gemini_api_key", userKey);
+                    currentKey = userKey;
+                }
+            }
+
+            if (!currentKey) {
+                console.error("API Key not found.");
+                throw new Error("API Key missing");
+            }
+
+            const systemPrompt = `You are an expert Legal Contract Analyst AI. 
+            Your goal is to assist users in understanding complex legal documents, finding specific clauses, and summarizing obligations.
+            CONTEXT DOCUMENTS: ${currentContext}`;
+
+            const contents = history.filter(m => m.role !== 'system').map(m => ({
+                role: m.role === 'user' ? 'user' : 'model',
+                parts: [{ text: m.content }]
+            }));
+            contents.push({ role: 'user', parts: [{ text: userMessage }] });
+
+            // Use standard model name for better public key support
+            const modelName = "gemini-1.5-flash"; 
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${currentKey}`;
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents, systemInstruction: { parts: [{ text: systemPrompt }] } })
+                });
+
+                if (!response.ok) {
+                    let errMessage = `Gemini API Error: ${response.status} ${response.statusText}`;
+                    try {
+                        const errData = await response.json();
+                        if (errData.error && errData.error.message) {
+                            errMessage = `API Error: ${errData.error.message}`;
+                        }
+                    } catch (e) {}
+                    console.error("Gemini API Error Detail:", errMessage);
+                    throw new Error(errMessage);
+                }
+                const data = await response.json();
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't process that request.";
+            } catch (error) {
+                console.error("Gemini Request Failed:", error);
+                throw error;
+            }
+        };
+
+        // --- COMPONENTS ---
+
+        const FileUpload = ({ onFileSelect, isProcessing }) => {
+            const fileInputRef = useRef(null);
+            const [isDragging, setIsDragging] = useState(false);
+
+            const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
+            const handleDragLeave = (e) => { e.preventDefault(); setIsDragging(false); };
+            const handleDrop = (e) => {
+                e.preventDefault(); setIsDragging(false);
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) onFileSelect(e.dataTransfer.files);
+            };
+
+            return React.createElement("div", {
+                onClick: () => !isProcessing && fileInputRef.current?.click(),
+                onDragOver: handleDragOver,
+                onDragLeave: handleDragLeave,
+                onDrop: handleDrop,
+                className: `relative border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer 
+                ${isDragging ? 'border-brand-500 bg-brand-50' : 'border-slate-300 hover:border-brand-400 hover:bg-slate-50'} 
+                ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`
+            }, 
+                React.createElement("input", { type: "file", ref: fileInputRef, onChange: (e) => e.target.files && onFileSelect(e.target.files), className: "hidden", accept: ".pdf", multiple: true, disabled: isProcessing }),
+                React.createElement("div", { className: "flex flex-col items-center gap-3" },
+                    React.createElement("div", { className: `p-3 rounded-full ${isDragging ? 'bg-brand-100 text-brand-600' : 'bg-slate-100 text-slate-500'}` }, React.createElement(UploadCloud, { className: "w-6 h-6" })),
+                    React.createElement("div", null,
+                        React.createElement("p", { className: "text-sm font-medium text-slate-700" }, isProcessing ? 'Processing...' : 'Click or Drag files'),
+                        React.createElement("p", { className: "text-xs text-slate-400 mt-1" }, "PDF contracts only")
+                    )
+                )
+            );
+        };
+
+        const ChatInterface = ({ messages, onSendMessage, isLoading, documentsLoaded }) => {
+            const [input, setInput] = useState('');
+            const messagesEndRef = useRef(null);
+
+            const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            useEffect(() => scrollToBottom(), [messages, isLoading]);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!input.trim() || isLoading) return;
+                onSendMessage(input);
+                setInput('');
+            };
+
+            return React.createElement("div", { className: "flex flex-col h-full bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden" },
+                React.createElement("div", { className: "flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide" },
+                    messages.length === 0 && React.createElement("div", { className: "flex flex-col items-center justify-center h-full text-center text-slate-400 p-8" },
+                        React.createElement(Bot, { className: "w-12 h-12 mb-4 text-slate-300" }),
+                        React.createElement("p", { className: "text-lg font-medium text-slate-600" }, "Contract Analyst AI"),
+                        React.createElement("p", { className: "text-sm max-w-md mt-2" }, !documentsLoaded ? "Upload contracts for analysis or ask general legal questions to get started." : "Ask me anything about the uploaded contracts.")
+                    ),
+                    messages.map((msg) => React.createElement("div", { key: msg.id, className: `flex gap-3 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}` },
+                        msg.role === 'model' && React.createElement("div", { className: "w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0 text-brand-600" }, React.createElement(Bot, { className: "w-5 h-5" })),
+                        React.createElement("div", { className: `max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${msg.role === 'user' ? 'bg-brand-600 text-white rounded-br-none' : 'bg-slate-50 text-slate-800 rounded-bl-none border border-slate-100'}` },
+                            React.createElement(ReactMarkdown, { components: {
+                                strong: ({node, ...props}) => React.createElement("span", { className: "font-bold text-brand-700 bg-brand-50/50 px-0.5 rounded", ...props }),
+                                ul: ({node, ...props}) => React.createElement("ul", { className: "list-disc ml-4 my-2 space-y-1", ...props }),
+                                ol: ({node, ...props}) => React.createElement("ol", { className: "list-decimal ml-4 my-2 space-y-1", ...props })
+                            }}, msg.content)
+                        ),
+                        msg.role === 'user' && React.createElement("div", { className: "w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center flex-shrink-0 text-slate-500" }, React.createElement(User, { className: "w-5 h-5" }))
+                    )),
+                    isLoading && React.createElement("div", { className: "flex gap-3 justify-start" },
+                        React.createElement("div", { className: "w-8 h-8 rounded-full bg-brand-100 flex items-center justify-center flex-shrink-0 text-brand-600" }, React.createElement(Bot, { className: "w-5 h-5" })),
+                        React.createElement("div", { className: "bg-slate-50 rounded-2xl rounded-bl-none px-4 py-3 border border-slate-100 flex items-center gap-2" },
+                            React.createElement(Loader2, { className: "w-4 h-4 animate-spin text-brand-600" }),
+                            React.createElement("span", { className: "text-xs text-slate-500 font-medium" }, "Analyzing contracts...")
+                        )
+                    ),
+                    React.createElement("div", { ref: messagesEndRef })
+                ),
+                React.createElement("div", { className: "p-4 border-t border-slate-100 bg-slate-50" },
+                    React.createElement("form", { onSubmit: handleSubmit, className: "flex gap-2" },
+                        React.createElement("input", {
+                            type: "text", value: input, onChange: (e) => setInput(e.target.value),
+                            placeholder: documentsLoaded ? "Ask about liability, termination clauses, dates..." : "Type your question here...",
+                            disabled: isLoading,
+                            className: "flex-1 px-4 py-2.5 rounded-lg border border-slate-300 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 disabled:opacity-50 disabled:bg-slate-100 text-sm"
+                        }),
+                        React.createElement("button", { type: "submit", disabled: isLoading || !input.trim(), className: "px-4 py-2.5 bg-brand-600 text-white rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors" }, React.createElement(Send, { className: "w-5 h-5" }))
+                    )
+                )
             );
         };
 
         const App = () => {
-            const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-            const [activeTab, setActiveTab] = useState('timelapse');
-            const [currentFrame, setCurrentFrame] = useState(null);
-            const [allFrames, setAllFrames] = useState(MOCK_FRAMES);
-            const [isUsingLocalData, setIsUsingLocalData] = useState(false);
-            const [startDate, setStartDate] = useState('');
-            const [endDate, setEndDate] = useState('');
-
-            // Hoisted State for Compare View
-            const [compareLeftIndex, setCompareLeftIndex] = useState(0);
-            const [compareRightIndex, setCompareRightIndex] = useState(0);
+            const [files, setFiles] = useState([]);
+            const [isProcessing, setIsProcessing] = useState(false);
+            const [processingProgress, setProcessingProgress] = useState(null);
+            const [messages, setMessages] = useState([]);
+            const [isChatLoading, setIsChatLoading] = useState(false);
+            const [documentsLoaded, setDocumentsLoaded] = useState(false);
+            const [user, setUser] = useState({ uid: 'local-user' }); // Mock user for local storage
+            
+            // Switch to Local Storage Hook
+            const { saveFile, deleteFile, getAllFiles, clearAllFiles, loading: isStorageLoading, setLoading: setStorageLoading } = useStorage();
 
             useEffect(() => {
-                if (allFrames.length > 0) {
-                    const sorted = [...allFrames].sort((a, b) => new Date(a.date) - new Date(b.date));
-                    setStartDate(sorted[0].date);
-                    setEndDate(sorted[sorted.length - 1].date);
-                    setCompareRightIndex(sorted.length - 1); // Set compare right to last frame
+                const loadFiles = async () => {
+                    setStorageLoading(true);
+                    const storedFiles = await getAllFiles();
+                    if (storedFiles.length > 0) setFiles(storedFiles);
+                    setStorageLoading(false);
+                };
+                loadFiles();
+            }, []);
+
+            const estimatedTokens = files.reduce((acc, file) => acc + (file.pageCount * 650), 0);
+            const isOverContextLimit = estimatedTokens > 1000000;
+
+            const handleFileSelect = async (fileList) => {
+                setIsProcessing(true);
+                setDocumentsLoaded(false);
+                for (let i = 0; i < fileList.length; i++) {
+                    const file = fileList[i];
+                    const tempId = crypto.randomUUID();
+                    try {
+                        setProcessingProgress({ current: 0, total: 0 });
+                        const result = await extractTextFromPDF(file, (loaded, total) => setProcessingProgress({ current: loaded, total }));
+                        const newFile = {
+                            id: tempId, name: file.name, size: file.size,
+                            pageCount: result.pageCount, content: result.text,
+                            status: 'ready', uploadedAt: Date.now()
+                        };
+                        setFiles(prev => [...prev, newFile]);
+                        await saveFile(newFile);
+                    } catch (error) {
+                        console.error(`Error processing ${file.name}:`, error);
+                        setFiles(prev => [...prev, { id: tempId, name: file.name, size: file.size, pageCount: 0, content: '', status: 'error', errorMessage: 'Failed to parse PDF', uploadedAt: Date.now() }]);
+                    }
                 }
-            }, [allFrames]);
-
-            const filteredFrames = useMemo(() => {
-                return allFrames
-                    .filter(frame => frame.date >= startDate && frame.date <= endDate)
-                    .sort((a, b) => new Date(a.date) - new Date(b.date));
-            }, [startDate, endDate, allFrames]);
-
-            const sortedAllFrames = useMemo(() => {
-                return [...allFrames].sort((a, b) => new Date(a.date) - new Date(b.date));
-            }, [allFrames]);
-
-            const handleFolderSelect = (fileList) => {
-                const newFrames = [];
-                const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
-                files.forEach((file, index) => {
-                    const name = file.name;
-                    let dateStr = new Date(file.lastModified).toISOString().split('T')[0];
-                    const isoMatch = name.match(/(\d{4})[-_.](\d{2})[-_.](\d{2})/);
-                    if (isoMatch) dateStr = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
-                    const objectUrl = URL.createObjectURL(file);
-                    newFrames.push({
-                        id: `local-${index}`,
-                        date: dateStr,
-                        time: new Date(file.lastModified).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}),
-                        imageUrl: objectUrl,
-                        thumbnailUrl: objectUrl
-                    });
-                });
-                if (newFrames.length > 0) {
-                    newFrames.sort((a, b) => new Date(a.date) - new Date(b.date));
-                    setAllFrames(newFrames);
-                    setIsUsingLocalData(true);
-                    setStartDate(newFrames[0].date);
-                    setEndDate(newFrames[newFrames.length - 1].date);
-                    setCompareRightIndex(newFrames.length - 1);
-                    alert(`Loaded ${newFrames.length} images sorted by date.`);
-                } else {
-                    alert("No images found.");
-                }
+                setIsProcessing(false);
+                setProcessingProgress(null);
             };
 
-            return (
-                <div className="flex h-screen w-full bg-gray-50 overflow-hidden font-sans">
-                    <Sidebar isOpen={isSidebarOpen} activeTab={activeTab} setActiveTab={setActiveTab} onFolderSelect={handleFolderSelect} />
-                    <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-                        <Header project={MOCK_PROJECT} toggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
-                        <main className="flex-1 p-4 md:p-6 overflow-hidden relative flex flex-col bg-gray-100">
-                            {/* Layout Container */}
-                            <div className="flex-1 flex flex-col lg:flex-row h-full overflow-hidden gap-4">
-                                
-                                {/* MAIN CONTENT AREA */}
-                                <div className="flex-1 flex flex-col min-w-0 h-full">
-                                    <div className="flex items-center justify-between mb-2 shrink-0">
-                                        <h1 className="text-xl font-bold text-gray-800">
-                                            {activeTab === 'timelapse' ? 'Timelapse Monitor' : activeTab === 'compare' ? 'Side-by-Side Comparison' : 'Live View'}
-                                            {isUsingLocalData && <span className="ml-3 px-2 py-0.5 bg-green-100 text-green-700 text-xs rounded-full border border-green-200 font-medium align-middle">Local Source</span>}
-                                        </h1>
-                                        {activeTab === 'timelapse' && <span className="text-sm text-gray-500">{filteredFrames.length} frames selected</span>}
-                                    </div>
+            const removeFile = async (id) => {
+                setFiles(prev => prev.filter(f => f.id !== id));
+                setDocumentsLoaded(false);
+                await deleteFile(id);
+            };
 
-                                    <div className="flex-1 relative min-h-0">
-                                        {activeTab === 'timelapse' ? (
-                                            filteredFrames.length > 0 ? (
-                                                <TimelapsePlayer frames={filteredFrames} onFrameChange={setCurrentFrame} />
-                                            ) : (
-                                                <div className="w-full h-full bg-white rounded-xl shadow border border-gray-200 flex items-center justify-center flex-col text-gray-400">
-                                                    <div className="mb-3 opacity-20"><Icon name="folder-open" size={48} /></div>
-                                                    <p>No images in selected range.</p>
-                                                </div>
-                                            )
-                                        ) : activeTab === 'compare' ? (
-                                            <CompareView 
-                                                frames={allFrames} 
-                                                leftIndex={compareLeftIndex}
-                                                setLeftIndex={setCompareLeftIndex}
-                                                rightIndex={compareRightIndex}
-                                                setRightIndex={setCompareRightIndex}
-                                            />
-                                        ) : (
-                                            <div className="w-full h-full bg-slate-900 rounded-xl flex flex-col items-center justify-center text-gray-400">
-                                                 <div className="mb-4 opacity-20"><Icon name="camera" size={64} /></div>
-                                                 <h2 className="text-xl font-bold text-gray-300">Live Stream Offline</h2>
-                                                 <p className="text-sm">Connect a camera to view live feed.</p>
-                                            </div>
-                                        )}
-                                    </div>
-                                    
-                                    {/* Space Below Frame */}
-                                    <div className="h-6 shrink-0"></div>
-                                </div>
+            const handleClearAll = async () => {
+                await clearAllFiles(files);
+                setFiles([]);
+                setDocumentsLoaded(false);
+                setMessages([]);
+            };
 
-                                {/* RIGHT SIDEBAR (Controls) - DYNAMIC CONTENT */}
-                                {activeTab !== 'live-view' && (
-                                    <div className="w-full lg:w-80 bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col shrink-0 lg:h-auto overflow-hidden">
-                                        <div className="p-4 border-b border-gray-100 bg-gray-50">
-                                            <h3 className="font-semibold text-gray-800 flex items-center">
-                                                <Icon name="settings-2" size={16} className="mr-2 text-indigo-600"/> 
-                                                {activeTab === 'timelapse' ? 'Configuration' : 'Comparison Settings'}
-                                            </h3>
-                                        </div>
-                                        
-                                        <div className="p-5 flex flex-col gap-6 overflow-y-auto flex-1">
-                                            {/* TIMELAPSE CONTROLS */}
-                                            {activeTab === 'timelapse' && (
-                                                <>
-                                                    <div>
-                                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Data Source</label>
-                                                        {isUsingLocalData ? (
-                                                            <div className="w-full px-3 py-2 bg-indigo-50 border border-indigo-200 text-indigo-800 text-sm rounded-lg font-medium flex items-center">
-                                                                <Icon name="folder-open" size={16} className="mr-2"/>
-                                                                Local Folder
-                                                                <button onClick={() => { setIsUsingLocalData(false); setAllFrames(MOCK_FRAMES); }} className="ml-auto text-xs hover:underline">Reset</button>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="text-sm text-gray-600 bg-gray-50 p-2 rounded border border-gray-200">
-                                                                Using Mock Data
-                                                            </div>
-                                                        )}
-                                                    </div>
+            const initializeAnalysis = async () => {
+                if (files.length === 0) return;
+                setIsChatLoading(true);
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 800));
+                    setDocumentsLoaded(true);
+                    setMessages([{ id: 'system-1', role: 'model', content: `I have analyzed ${files.length} document(s) totaling approx. ${files.reduce((a,b) => a + (b.pageCount || 0), 0)} pages. I am ready to answer questions.`, timestamp: Date.now() }]);
+                } finally { setIsChatLoading(false); }
+            };
 
-                                                    <div>
-                                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Date Range</label>
-                                                        <div className="space-y-3">
-                                                            <div>
-                                                                <span className="text-xs text-gray-400 block mb-1">From</span>
-                                                                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                                            </div>
-                                                            <div>
-                                                                <span className="text-xs text-gray-400 block mb-1">To</span>
-                                                                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                                            </div>
-                                                        </div>
-                                                    </div>
+            const handleSendMessage = async (text) => {
+                const newMessage = { id: Date.now().toString(), role: 'user', content: text, timestamp: Date.now() };
+                const newHistory = [...messages, newMessage];
+                setMessages(newHistory);
+                setIsChatLoading(true);
+                try {
+                    const combinedContext = files.filter(f => f.status === 'ready').map(f => `--- DOCUMENT: ${f.name} ---\n${f.content}\n--- END DOCUMENT ---\n`).join('\n');
+                    const responseText = await sendMessageToGemini(newHistory, combinedContext, text);
+                    setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), role: 'model', content: responseText, timestamp: Date.now() }]);
+                } catch (error) {
+                    console.error("Chat error:", error);
+                    // Pass specific error to UI so user can see it
+                    setMessages(prev => [...prev, { 
+                        id: Date.now().toString(), 
+                        role: 'model', 
+                        content: `**Error:** ${error.message}. \n\nPlease check your API key and internet connection and try again.`, 
+                        timestamp: Date.now() 
+                    }]);
+                } finally { setIsChatLoading(false); }
+            };
 
-                                                    <div>
-                                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">Quick Select</label>
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                            <button onClick={() => {
-                                                                const end = new Date(endDate || new Date());
-                                                                const start = new Date(end); start.setDate(end.getDate() - 7);
-                                                                setStartDate(start.toISOString().split('T')[0]);
-                                                            }} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded text-xs font-medium text-gray-600 transition-colors">Last 7 Days</button>
-                                                            <button onClick={() => {
-                                                                const end = new Date(endDate || new Date());
-                                                                const start = new Date(end); start.setDate(end.getDate() - 30);
-                                                                setStartDate(start.toISOString().split('T')[0]);
-                                                            }} className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded text-xs font-medium text-gray-600 transition-colors">Last 30 Days</button>
-                                                            <button onClick={() => {
-                                                                if(allFrames.length){
-                                                                    const sorted = [...allFrames].sort((a,b)=>new Date(a.date)-new Date(b.date));
-                                                                    setStartDate(sorted[0].date); setEndDate(sorted[sorted.length-1].date);
-                                                                }
-                                                            }} className="col-span-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded text-xs font-medium text-gray-600 transition-colors">Reset to All Time</button>
-                                                        </div>
-                                                    </div>
-                                                </>
-                                            )}
+            if (isStorageLoading) return React.createElement("div", { className: "h-screen w-screen flex flex-col items-center justify-center bg-slate-50 text-slate-400 gap-4" }, React.createElement("div", { className: "animate-spin rounded-full h-10 w-10 border-b-2 border-brand-600" }), React.createElement("p", { className: "text-sm font-medium animate-pulse" }, "Initializing Local Storage..."));
 
-                                            {/* COMPARE CONTROLS (Moved from top to here) */}
-                                            {activeTab === 'compare' && (
-                                                <>
-                                                    <div>
-                                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block flex items-center">
-                                                            <span className="w-2 h-2 bg-indigo-500 rounded-full mr-2"></span>Left Image (Before)
-                                                        </label>
-                                                        <select 
-                                                            className="w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500"
-                                                            value={compareLeftIndex}
-                                                            onChange={(e) => setCompareLeftIndex(Number(e.target.value))}
-                                                        >
-                                                            {sortedAllFrames.map((f, i) => (
-                                                                <option key={f.id} value={i}>
-                                                                    {f.date} {f.time}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        {sortedAllFrames[compareLeftIndex] && (
-                                                            <div className="mt-2 rounded-lg overflow-hidden h-32 border border-gray-200">
-                                                                <img src={sortedAllFrames[compareLeftIndex].thumbnailUrl} className="w-full h-full object-cover" alt="Preview Left" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="h-px bg-gray-100"></div>
-
-                                                    <div>
-                                                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block flex items-center">
-                                                            <span className="w-2 h-2 bg-white border-2 border-indigo-500 rounded-full mr-2"></span>Right Image (After)
-                                                        </label>
-                                                        <select 
-                                                            className="w-full p-2.5 text-sm border border-gray-200 rounded-lg bg-gray-50 outline-none focus:ring-2 focus:ring-indigo-500"
-                                                            value={compareRightIndex}
-                                                            onChange={(e) => setCompareRightIndex(Number(e.target.value))}
-                                                        >
-                                                            {sortedAllFrames.map((f, i) => (
-                                                                <option key={f.id} value={i}>
-                                                                    {f.date} {f.time}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                        {sortedAllFrames[compareRightIndex] && (
-                                                            <div className="mt-2 rounded-lg overflow-hidden h-32 border border-gray-200">
-                                                                <img src={sortedAllFrames[compareRightIndex].thumbnailUrl} className="w-full h-full object-cover" alt="Preview Right" />
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </main>
-                    </div>
-                </div>
+            return React.createElement("div", { className: "flex h-screen bg-slate-50 text-slate-900 font-sans" },
+                React.createElement("div", { className: "w-80 bg-white border-r border-slate-200 flex flex-col hidden md:flex shrink-0" },
+                    React.createElement("div", { className: "p-6 border-b border-slate-100" },
+                        React.createElement("div", { className: "flex items-center gap-2 text-brand-700 mb-1" }, React.createElement(Layout, { className: "w-6 h-6" }), React.createElement("h1", { className: "font-bold text-xl tracking-tight" }, "ContractAI (Local)")),
+                        React.createElement("p", { className: "text-xs text-slate-500 font-medium" }, "Legal Document Analyst")
+                    ),
+                    React.createElement("div", { className: "flex-1 overflow-y-auto p-4" },
+                        React.createElement("div", { className: "mb-6" },
+                            React.createElement(FileUpload, { onFileSelect: handleFileSelect, isProcessing }),
+                            isProcessing && processingProgress && React.createElement("div", { className: "mt-4 bg-slate-50 rounded-lg p-3 border border-slate-200 shadow-sm" },
+                                React.createElement("div", { className: "flex justify-between text-xs text-slate-600 mb-2 font-medium" },
+                                    React.createElement("span", { className: "flex items-center gap-1" }, React.createElement(Loader2, { className: "w-3 h-3 animate-spin" }), " Extracting Text..."),
+                                    React.createElement("span", null, `${processingProgress.current} / ${processingProgress.total}`)
+                                ),
+                                React.createElement("div", { className: "w-full bg-slate-200 rounded-full h-1.5 overflow-hidden" }, React.createElement("div", { className: "bg-brand-500 h-1.5 rounded-full transition-all duration-300", style: { width: `${(processingProgress.current / processingProgress.total) * 100}%` } }))
+                            )
+                        ),
+                        React.createElement("div", { className: "space-y-3" },
+                            React.createElement("div", { className: "flex items-center justify-between mb-2 px-1" },
+                                React.createElement("h2", { className: "text-xs font-bold text-slate-400 uppercase tracking-wider" }, "Workspace"),
+                                files.length > 0 && React.createElement("div", { className: "flex items-center gap-1 text-[10px] text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full font-medium" }, React.createElement(Database, { className: "w-3 h-3" }), React.createElement("span", null, "Local Storage"))
+                            ),
+                            files.length === 0 && React.createElement("div", { className: "text-center py-8 border-2 border-dashed border-slate-100 rounded-xl" }, React.createElement("p", { className: "text-sm text-slate-400 italic" }, "No documents stored")),
+                            files.map(file => React.createElement("div", { key: file.id, className: "group relative bg-white border border-slate-200 rounded-lg p-3 hover:shadow-md transition-all hover:border-brand-200" },
+                                React.createElement("div", { className: "flex items-start gap-3" },
+                                    React.createElement("div", { className: `mt-1 p-2 rounded-lg ${file.status === 'ready' ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}` }, React.createElement(FileText, { className: "w-4 h-4" })),
+                                    React.createElement("div", { className: "flex-1 min-w-0" },
+                                        React.createElement("h3", { className: "text-sm font-semibold text-slate-800 truncate", title: file.name }, file.name),
+                                        React.createElement("div", { className: "flex items-center gap-2 mt-1" },
+                                            React.createElement("span", { className: "text-[10px] font-medium text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded" }, `${(file.size / 1024 / 1024).toFixed(2)} MB`),
+                                            React.createElement("span", { className: "text-[10px] font-medium text-slate-500" }, `${file.pageCount} Pages`)
+                                        )
+                                    ),
+                                    React.createElement("button", { onClick: () => removeFile(file.id), className: "opacity-0 group-hover:opacity-100 p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all" }, React.createElement(Trash2, { className: "w-4 h-4" }))
+                                )
+                            ))
+                        )
+                    ),
+                    React.createElement("div", { className: "p-4 border-t border-slate-200 bg-slate-50 space-y-3" },
+                        files.length > 0 && !documentsLoaded && !isProcessing && React.createElement("button", { onClick: initializeAnalysis, className: "w-full flex items-center justify-center gap-2 bg-brand-600 text-white py-2.5 px-4 rounded-lg text-sm font-semibold hover:bg-brand-700 transition-colors shadow-sm active:transform active:scale-95" }, React.createElement(RotateCw, { className: "w-4 h-4" }), "Load Context to AI"),
+                        documentsLoaded && React.createElement("div", { className: "w-full flex items-center justify-center gap-2 bg-emerald-100 text-emerald-800 py-2.5 px-4 rounded-lg text-sm font-medium border border-emerald-200 shadow-sm" }, React.createElement(CheckCircle2, { className: "w-4 h-4" }), "Context Active"),
+                        isOverContextLimit && React.createElement("div", { className: "flex items-start gap-2 text-[10px] text-amber-700 leading-tight bg-amber-50 p-2 rounded border border-amber-200" }, React.createElement(AlertTriangle, { className: "w-3 h-3 mt-0.5 shrink-0" }), "Warning: Large context size."),
+                        files.length > 0 && React.createElement("button", { onClick: handleClearAll, className: "w-full flex items-center justify-center gap-2 text-slate-400 hover:text-red-600 text-xs py-2 transition-colors font-medium" }, "Clear Workspace")
+                    )
+                ),
+                React.createElement("div", { className: "flex-1 flex flex-col h-full relative bg-slate-100/50" },
+                    React.createElement("div", { className: "md:hidden bg-white border-b border-slate-200 p-4 flex items-center justify-between shadow-sm" }, React.createElement("h1", { className: "font-bold text-slate-800 flex items-center gap-2" }, React.createElement(Layout, { className: "w-5 h-5 text-brand-600" }), "ContractAI")),
+                    React.createElement("div", { className: "flex-1 p-2 md:p-6 overflow-hidden max-w-5xl mx-auto w-full" }, React.createElement(ChatInterface, { messages, onSendMessage: handleSendMessage, isLoading: isChatLoading, documentsLoaded }))
+                )
             );
         };
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
+        const root = createRoot(document.getElementById('root'));
+        root.render(React.createElement(App));
     </script>
 </body>
 </html>
